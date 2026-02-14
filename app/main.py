@@ -1,6 +1,7 @@
 import sys
+import os
 
-from fetcher import fetch_url
+from fetcher import fetch_url, read_file
 from detector import detect_content_type
 from extractor import extract_indicators
 from normalizer import normalize_indicators
@@ -15,21 +16,32 @@ from storage import (
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python app/main.py <source_url>")
+        print("Usage: python app/main.py <source_url_or_file>")
+        print("  source_url_or_file: A URL (http/https) or a local .txt file path")
         return
 
-    source_url = sys.argv[1]
+    source_input = sys.argv[1]
 
     print("Initializing database...")
     init_db()
 
-    print("Fetching:", source_url)
-    result = fetch_url(source_url)
+    # Detect whether input is a local file or a URL
+    is_url = source_input.lower().startswith("http://") or source_input.lower().startswith("https://")
+    is_file = not is_url and (os.path.isfile(source_input) or source_input.lower().endswith(".txt"))
+
+    if is_file:
+        print("Reading file:", source_input)
+        result = read_file(source_input)
+        source_label = f"file://{os.path.abspath(source_input)}"
+    else:
+        print("Fetching:", source_input)
+        result = fetch_url(source_input)
+        source_label = source_input
 
     if not result["success"]:
-        print("Fetch failed ❌")
+        print("Failed ❌")
         print("Error:", result["error"])
-        register_source(source_url, "FAILED")
+        register_source(source_label, "FAILED")
         return
 
 
@@ -43,7 +55,7 @@ def main():
     raw_indicators = extract_indicators(result["content"])
     normalized = normalize_indicators(raw_indicators)
 
-    store_iocs(normalized, source_url)
+    store_iocs(normalized, source_label)
 
     print("Stored indicators in database ✅")
     print(
